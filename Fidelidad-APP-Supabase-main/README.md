@@ -194,11 +194,16 @@ El objetivo del proyecto es implementar un sistema web completo que integre:
 
 ### Seguridad y autenticación
 
-- Inicio de sesión mediante usuario y contraseña
-- Generación y validación de tokens JWT
-- Protección de rutas privadas
-- Protección de endpoints en backend
-- Restricción de acceso sin autenticación
+- Contraseñas hasheadas con bcrypt (nunca en texto plano)
+- Tokens JWT con algoritmo fijado (HS256) y expiración obligatoria
+- Row Level Security activo en todas las tablas de Supabase
+- Backend conectado con la `service_role` key; la `anon` key no accede a nada
+- CORS restringido a los orígenes configurados
+- Cabeceras de seguridad vía helmet (CSP, HSTS, nosniff, anti-clickjacking)
+- Limitación de peticiones por IP: global, en el login y en el envío de correos
+- Validación estricta de entradas con listas blancas
+- Los errores internos nunca se filtran en las respuestas
+- Protección de rutas privadas en frontend y backend
 
 ---
 
@@ -244,11 +249,23 @@ Las rutas protegidas no pueden ser accedidas sin autenticación válida.
 
 ---
 
-## Usuario de prueba
+## Usuario administrador
 
-Usuario: admin
+El usuario administrador **no viene precargado**: se crea al desplegar, con la
+contraseña hasheada con bcrypt.
 
-Contraseña: 1234
+```bash
+cd backend
+npm run crear-admin
+```
+
+Si no se indica `--password`, el script genera una contraseña aleatoria y la
+muestra una sola vez.
+
+> Las versiones anteriores traían `admin` / `1234` en `supabase.sql` y en este
+> README, y la comparación se hacía contra la contraseña en texto plano. Si
+> desplegaste alguna de esas versiones, ejecutá `DELETE FROM usuarios;` antes de
+> aplicar el nuevo esquema: esas credenciales están comprometidas.
 
 ---
 
@@ -314,19 +331,43 @@ Antes de ejecutar el backend localmente, copia el archivo de ejemplo:
 
 ```bash
 cd backend
-copy .env.example .env
+cp .env.example .env      # en Windows: copy .env.example .env
 ```
 
-Luego edita `backend/.env` con tus credenciales reales de Supabase. El archivo `.env` no se sube a Git por seguridad.
+Luego edita `backend/.env` con tus credenciales reales de Supabase. El archivo
+`.env` no se sube a Git por seguridad.
 
-Backend .env
+Comandos útiles del backend:
+
+```bash
+npm run verificar      # comprueba la configuración antes de desplegar
+npm run crear-admin    # crea o actualiza el usuario administrador
+npm test               # pruebas de regresión de seguridad
+```
+
+**Backend** (`backend/.env`) — la plantilla completa está en
+`backend/.env.example`:
+
+```ini
+NODE_ENV=production
 PORT=3000
-JWT_SECRET=claveSecreta123
+TRUST_PROXY=1
+CORS_ORIGINS=https://tudominio.com
+
+# Generalo con: openssl rand -base64 48
+# La aplicación se niega a arrancar en producción con un valor de ejemplo.
+JWT_SECRET=
 
 SUPABASE_URL=https://TU_PROYECTO.supabase.co
-SUPABASE_ANON_KEY=TU_SUPABASE_KEY
-Frontend .env
-VITE_API_URL=https://TU_BACKEND_RENDER.onrender.com/api
+SUPABASE_SERVICE_ROLE_KEY=TU_SERVICE_ROLE_KEY
+
+BREVO_API_KEY=
+BREVO_SENDER_EMAIL=
+```
+
+**Frontend** (`frontend/.env`): normalmente no hace falta. Sin `VITE_API_URL` se
+usa la ruta relativa `/api` y nginx hace de proxy. Solo definila si el backend
+está en otro dominio.
 Base de datos
 
 La base de datos fue implementada en Supabase utilizando PostgreSQL.
@@ -351,17 +392,14 @@ Backend
 Los endpoints protegidos requieren un token JWT válido para permitir operaciones sobre la API.
 
 Despliegue del sistema
-Frontend
 
-Desplegado en Vercel.
-
-Backend
-
-Desplegado en Render.
+Para desplegar en un VPS propio (nginx + PMIA + TLS) seguí la guía completa en
+[DEPLOY.md](DEPLOY.md), que incluye la configuración de nginx
+(`deploy/nginx.conf`) y de PM2 (`deploy/ecosystem.config.cjs`).
 
 Base de datos
 
-Implementada en Supabase PostgreSQL.
+Implementada en Supabase PostgreSQL, con Row Level Security activo.
 
 Estado del proyecto
 

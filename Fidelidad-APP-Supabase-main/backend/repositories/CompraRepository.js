@@ -1,24 +1,40 @@
+const { fetchAll } = require('./fetchAll');
+
+const CAMPOS = 'id, cliente_id, fecha, monto, puntos_generados';
+
 class CompraRepository {
   constructor(dbClient) {
     this.db = dbClient;
   }
 
   async findAllOrdered() {
-    const { data, error } = await this.db
-      .from('compras')
-      .select('id, cliente_id, fecha, monto, puntos_generados')
-      .order('fecha', { ascending: true })
-      .order('id', { ascending: true });
+    return fetchAll((desde, hasta) =>
+      this.db
+        .from('compras')
+        .select(CAMPOS)
+        .order('fecha', { ascending: true })
+        .order('id', { ascending: true })
+        .range(desde, hasta)
+    );
+  }
 
-    if (error) throw error;
-    return data || [];
+  async findByClienteId(clienteId) {
+    return fetchAll((desde, hasta) =>
+      this.db
+        .from('compras')
+        .select(CAMPOS)
+        .eq('cliente_id', clienteId)
+        .order('fecha', { ascending: true })
+        .order('id', { ascending: true })
+        .range(desde, hasta)
+    );
   }
 
   async create(compra) {
     const { data, error } = await this.db
       .from('compras')
       .insert([compra])
-      .select('id, cliente_id, fecha, monto, puntos_generados')
+      .select(CAMPOS)
       .single();
 
     if (error) throw error;

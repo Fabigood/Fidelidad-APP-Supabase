@@ -1,5 +1,5 @@
 import { reactive } from 'vue'
-import api from '../services/api'
+import api, { mensajeDeError } from '../services/api'
 
 export const HOY = new Date().toISOString().slice(0, 10)
 
@@ -43,37 +43,30 @@ export async function cargarDatos() {
     state.clientes = clientesRes.data || []
     state.catalogo = recompensasRes.data || []
   } catch (err) {
-    state.error = err.response?.data?.error || 'No se pudieron cargar los datos'
+    state.error = mensajeDeError(err, 'No se pudieron cargar los datos')
     console.error(err)
   } finally {
     state.loading = false
   }
 }
+
 export async function cargarResumenAdministrativo() {
   state.loading = true
   state.error = ''
 
   try {
-    const { data } = await api.get('/fidelidad/resumen-publico')
+    // Endpoint autenticado: incluye las cifras de negocio que el resumen
+    // público ya no expone.
+    const { data } = await api.get('/fidelidad/resumen')
     state.resumen = data || null
     return state.resumen
   } catch (err) {
-    state.error = err.response?.data?.error || 'No se pudo cargar el resumen administrativo'
+    state.error = mensajeDeError(err, 'No se pudo cargar el resumen administrativo')
     console.error(err)
     return null
   } finally {
     state.loading = false
   }
-}
-
-export function calcularPuntos(compras = []) {
-  return compras.reduce((total, compra) => total + Math.floor(Number(compra.monto || 0)), 0)
-}
-
-export function calcularNivel(puntos) {
-  if (puntos >= 180) return 'Oro'
-  if (puntos >= 90) return 'Plata'
-  return 'Bronce'
 }
 
 export function nivelClass(nivel) {
@@ -106,10 +99,17 @@ export function estimarProximaCompra(compras = []) {
   return isoAddDays(ultima.fecha, Math.round(intervalo))
 }
 
+/**
+ * Enriquece al cliente con métricas de comportamiento.
+ *
+ * Los puntos y el nivel llegan calculados del backend y NO se recalculan aquí:
+ * duplicar los umbrales en el frontend hacía que una regla cambiada en
+ * levelStrategy.js dejara a las dos capas mostrando cosas distintas.
+ */
 export function analizarCliente(cliente) {
   const compras = cliente?.compras || []
-  const puntos = calcularPuntos(compras)
-  const nivel = calcularNivel(puntos)
+  const puntos = Number(cliente?.puntos ?? 0)
+  const nivel = cliente?.nivel || 'Bronce'
   const intervalo = calcularIntervaloPromedio(compras)
   const ultima = obtenerUltimaCompra(compras)
   const proxima = estimarProximaCompra(compras)
@@ -160,11 +160,21 @@ export function getClientesAnalizados() {
   return state.clientes.map(analizarCliente)
 }
 
+/**
+ * Devuelve null si el cliente no existe.
+ *
+ * Antes caía a state.clientes[0]: entrar a /admin/clientes/9999 mostraba el
+ * perfil de OTRO cliente como si fuera ese, y "Enviar tarjeta" le mandaba el
+ * correo a la persona equivocada.
+ */
 export function getCliente(id) {
-  return state.clientes.find(c => Number(c.id) === Number(id)) || state.clientes[0] || null
+  const clienteId = Number(id)
+  if (!Number.isFinite(clienteId)) return null
+  return state.clientes.find(c => Number(c.id) === clienteId) || null
 }
 
 export function recompensaSugerida(nivel) {
+  if (!nivel) return null
   const disponibles = state.catalogo.filter(r => r.activo && r.nivel === nivel)
   if (disponibles.length) return disponibles[0]
   return state.catalogo.find(r => r.activo) || null
@@ -252,4 +262,4 @@ export async function entregarRecompensa(clienteId, recompensaId, fecha = HOY) {
   return data
 }
 
-export { formatDate }
+export { formatDate, mensajeDeError }

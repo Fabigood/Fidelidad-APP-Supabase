@@ -1,22 +1,26 @@
+const { fetchAll } = require('./fetchAll');
+
+const CAMPOS = 'id, nombre, nivel, tipo, detalle, activo';
+
 class RecompensaRepository {
   constructor(dbClient) {
     this.db = dbClient;
   }
 
   async findAll() {
-    const { data, error } = await this.db
-      .from('recompensas')
-      .select('id, nombre, nivel, tipo, detalle, activo')
-      .order('id', { ascending: true });
-
-    if (error) throw error;
-    return data || [];
+    return fetchAll((desde, hasta) =>
+      this.db
+        .from('recompensas')
+        .select(CAMPOS)
+        .order('id', { ascending: true })
+        .range(desde, hasta)
+    );
   }
 
   async findById(id) {
     const { data, error } = await this.db
       .from('recompensas')
-      .select('id, nombre, nivel, tipo, detalle, activo')
+      .select(CAMPOS)
       .eq('id', id)
       .maybeSingle();
 
@@ -28,7 +32,7 @@ class RecompensaRepository {
     const { data, error } = await this.db
       .from('recompensas')
       .insert([recompensa])
-      .select('id, nombre, nivel, tipo, detalle, activo')
+      .select(CAMPOS)
       .single();
 
     if (error) throw error;
@@ -40,7 +44,7 @@ class RecompensaRepository {
       .from('recompensas')
       .update(recompensa)
       .eq('id', id)
-      .select('id, nombre, nivel, tipo, detalle, activo')
+      .select(CAMPOS)
       .maybeSingle();
 
     if (error) throw error;
@@ -48,12 +52,15 @@ class RecompensaRepository {
   }
 
   async delete(id) {
-    const { error } = await this.db
+    const { data, error } = await this.db
       .from('recompensas')
       .delete()
-      .eq('id', id);
+      .eq('id', id)
+      .select('id')
+      .maybeSingle();
 
     if (error) throw error;
+    return data;
   }
 }
 

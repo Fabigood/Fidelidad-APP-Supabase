@@ -56,10 +56,23 @@
       </article>
     </div>
   </section>
+
+  <section class="page fade-in" v-else-if="state.loading">
+    <p class="helper-text">Cargando cliente…</p>
+  </section>
+
+  <section class="page fade-in" v-else>
+    <div class="alert-error">
+      ⚠ No se encontró el cliente solicitado. Puede que haya sido eliminado.
+    </div>
+    <button class="primary-btn" @click="$router.push('/admin/clientes')">
+      Volver al listado
+    </button>
+  </section>
 </template>
 
 <script>
-import { cargarDatos, getCliente, analizarCliente, comprasOrdenadas, formatDate, enviarTarjeta, previsualizarTarjetaCliente } from '../data/fidelidadStore'
+import { state, cargarDatos, getCliente, analizarCliente, comprasOrdenadas, formatDate, enviarTarjeta, previsualizarTarjetaCliente, mensajeDeError } from '../data/fidelidadStore'
 import TarjetaPreviewModal from '../components/TarjetaPreviewModal.vue'
 
 export default {
@@ -67,6 +80,7 @@ export default {
   components: { TarjetaPreviewModal },
   data() {
     return {
+      state,
       enviando: false,
       mensajeTarjeta: '',
       errorTarjeta: false,
@@ -104,7 +118,7 @@ export default {
         this.mensajeTarjeta = `Tarjeta enviada a ${this.cliente.email}`
       } catch (err) {
         this.errorTarjeta = true
-        this.mensajeTarjeta = err?.response?.data?.error || 'No se pudo enviar la tarjeta de fidelidad'
+        this.mensajeTarjeta = mensajeDeError(err, 'No se pudo enviar la tarjeta de fidelidad')
       } finally {
         this.enviando = false
       }
@@ -117,7 +131,7 @@ export default {
       try {
         this.previewHtml = await previsualizarTarjetaCliente(this.cliente.id)
       } catch (err) {
-        this.previewError = err?.response?.data?.error || 'No se pudo cargar la vista previa'
+        this.previewError = mensajeDeError(err, 'No se pudo cargar la vista previa')
       } finally {
         this.previewCargando = false
       }
@@ -127,6 +141,25 @@ export default {
 </script>
 
 <style scoped>
+.alert-error {
+  background: #fdecea;
+  border: 1px solid #e74c3c;
+  color: #c0392b;
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 0.875rem;
+  margin-bottom: 10px;
+}
+.alert-success {
+  background: #eafaf1;
+  border: 1px solid #2ecc71;
+  color: #1e8449;
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 0.875rem;
+  margin-bottom: 10px;
+}
+
 .tarjeta-mensaje {
   margin: -8px 0 16px;
   color: #1e8449;

@@ -71,11 +71,12 @@
           </div>
 
           <div class="actions-row">
-            <button class="primary-btn" @click="entregar" :disabled="!recompensaId">
+            <button class="primary-btn" @click="entregar" :disabled="!recompensaId || entregando">
               Entregar recompensa
             </button>
           </div>
           <p v-if="mensaje" class="success-msg">✓ {{ mensaje }}</p>
+          <div v-if="error" class="alert-error">⚠ {{ error }}</div>
         </template>
       </article>
     </div>
@@ -95,7 +96,7 @@
 </template>
 
 <script>
-import { HOY, cargarDatos, getClientesAnalizados, getCliente, analizarCliente, recompensaSugerida, recompensasPorNivel, entregarRecompensa, nivelClass } from '../data/fidelidadStore'
+import { HOY, cargarDatos, getClientesAnalizados, getCliente, analizarCliente, recompensaSugerida, recompensasPorNivel, entregarRecompensa, nivelClass, mensajeDeError } from '../data/fidelidadStore'
 
 export default {
   name: 'Recompensas',
@@ -103,7 +104,9 @@ export default {
     return {
       clienteId: '',
       recompensaId: null,
-      mensaje: ''
+      mensaje: '',
+      error: '',
+      entregando: false
     }
   },
   mounted() {
@@ -149,15 +152,49 @@ export default {
   methods: {
     nivelClass,
     async entregar() {
+      this.error = ''
+      this.mensaje = ''
+
+      if (!this.clienteId || !this.recompensaId) {
+        this.error = 'Seleccioná un cliente y una recompensa'
+        return
+      }
+
       const item = this.recompensaSeleccionada
-      const registro = await entregarRecompensa(this.clienteId, this.recompensaId, HOY)
-      if (registro) this.mensaje = 'Recompensa entregada: ' + (item ? item.nombre : 'registrada')
+      this.entregando = true
+      try {
+        const registro = await entregarRecompensa(this.clienteId, this.recompensaId, HOY)
+        if (registro) this.mensaje = 'Recompensa entregada: ' + (item ? item.nombre : 'registrada')
+      } catch (err) {
+        this.error = mensajeDeError(err, 'No se pudo entregar la recompensa')
+      } finally {
+        this.entregando = false
+      }
     }
   }
 }
 </script>
 
 <style scoped>
+.alert-error {
+  background: #fdecea;
+  border: 1px solid #e74c3c;
+  color: #c0392b;
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 0.875rem;
+  margin-bottom: 10px;
+}
+.alert-success {
+  background: #eafaf1;
+  border: 1px solid #2ecc71;
+  color: #1e8449;
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 0.875rem;
+  margin-bottom: 10px;
+}
+
 .step-badge {
   display: inline-flex;
   align-items: center;

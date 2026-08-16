@@ -8,6 +8,8 @@
       <button class="primary-btn" @click="nuevo">Nueva recompensa</button>
     </div>
 
+    <div v-if="error" class="alert-error">⚠ {{ error }}</div>
+
     <div class="crud-grid">
       <article class="panel-card form-card">
         <h2>{{ form.id ? 'Editar recompensa' : 'Crear recompensa' }}</h2>
@@ -36,8 +38,10 @@
         <label class="check-line"><input type="checkbox" v-model="form.activo" /> Activo</label>
 
         <div class="actions-row">
-          <button class="primary-btn" @click="guardar">Guardar</button>
-          <button class="ghost-btn" @click="nuevo">Limpiar</button>
+          <button class="primary-btn" @click="guardar" :disabled="guardando">
+            {{ guardando ? 'Guardando…' : 'Guardar' }}
+          </button>
+          <button class="ghost-btn" @click="nuevo" :disabled="guardando">Limpiar</button>
         </div>
       </article>
 
@@ -61,14 +65,14 @@
 </template>
 
 <script>
-import { state, cargarDatos, guardarRecompensa, eliminarRecompensa, nivelClass } from '../data/fidelidadStore'
+import { state, cargarDatos, guardarRecompensa, eliminarRecompensa, nivelClass, mensajeDeError } from '../data/fidelidadStore'
 
 const emptyForm = () => ({ id: null, nombre: '', nivel: 'Bronce', tipo: 'Producto', detalle: '', activo: true })
 
 export default {
   name: 'CatalogoRegalos',
   data() {
-    return { form: emptyForm() }
+    return { form: emptyForm(), error: '', guardando: false }
   },
   mounted() {
     cargarDatos()
@@ -87,14 +91,52 @@ export default {
       this.form = { ...r }
     },
     async guardar() {
-      if (!this.form.nombre.trim()) return
-      await guardarRecompensa({ ...this.form })
-      this.nuevo()
+      this.error = ''
+      if (!this.form.nombre.trim()) {
+        this.error = 'El nombre de la recompensa es obligatorio'
+        return
+      }
+
+      this.guardando = true
+      try {
+        await guardarRecompensa({ ...this.form })
+        this.nuevo()
+      } catch (err) {
+        this.error = mensajeDeError(err, 'No se pudo guardar la recompensa')
+      } finally {
+        this.guardando = false
+      }
     },
     async eliminar(id) {
       if (!confirm('¿Eliminar esta recompensa?')) return
-      await eliminarRecompensa(id)
+      this.error = ''
+      try {
+        await eliminarRecompensa(id)
+      } catch (err) {
+        this.error = mensajeDeError(err, 'No se pudo eliminar la recompensa')
+      }
     }
   }
 }
 </script>
+
+<style scoped>
+.alert-error {
+  background: #fdecea;
+  border: 1px solid #e74c3c;
+  color: #c0392b;
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 0.875rem;
+  margin-bottom: 10px;
+}
+.alert-success {
+  background: #eafaf1;
+  border: 1px solid #2ecc71;
+  color: #1e8449;
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 0.875rem;
+  margin-bottom: 10px;
+}
+</style>

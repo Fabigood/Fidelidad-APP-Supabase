@@ -1,3 +1,4 @@
+const config = require('./config');
 const supabase = require('../supabase');
 const UserRepository = require('../repositories/UserRepository');
 const ClienteRepository = require('../repositories/ClienteRepository');
@@ -31,16 +32,16 @@ function buildContainer() {
     levelStrategy: new ThresholdLevelStrategy()
   };
 
-  const emailProvider = new BrevoEmailProvider({
-    apiKey: process.env.BREVO_API_KEY,
-    senderEmail: process.env.BREVO_SENDER_EMAIL,
-    senderName: process.env.BREVO_SENDER_NAME
-  });
+  const emailProvider = new BrevoEmailProvider(config.brevo);
+
+  if (!emailProvider.configurado) {
+    console.warn('[AVISO] Brevo no está configurado: el envío de tarjetas por correo fallará.');
+  }
 
   const services = {
     authService: new AuthService({
       userRepository: repositories.userRepository,
-      jwtSecret: process.env.JWT_SECRET
+      jwtConfig: config.jwt
     }),
     clienteService: new ClienteService({
       clienteRepository: repositories.clienteRepository,

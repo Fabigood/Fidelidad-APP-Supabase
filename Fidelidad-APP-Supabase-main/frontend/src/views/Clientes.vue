@@ -95,7 +95,7 @@
 </template>
 
 <script>
-import { cargarDatos, getClientesAnalizados, guardarCliente, eliminarCliente, enviarTarjeta, previsualizarTarjetaCliente, nivelClass } from '../data/fidelidadStore'
+import { cargarDatos, getClientesAnalizados, guardarCliente, eliminarCliente, enviarTarjeta, previsualizarTarjetaCliente, nivelClass, mensajeDeError } from '../data/fidelidadStore'
 import TarjetaPreviewModal from '../components/TarjetaPreviewModal.vue'
 
 export default {
@@ -181,8 +181,13 @@ export default {
       this.errorGeneral = ''
     },
     async eliminar(id) {
-      if (!confirm('¿Eliminar este cliente?')) return
-      await eliminarCliente(id)
+      if (!confirm('¿Eliminar este cliente? Se borrarán también sus compras y recompensas.')) return
+      this.errorGeneral = ''
+      try {
+        await eliminarCliente(id)
+      } catch (err) {
+        this.errorGeneral = mensajeDeError(err, 'No se pudo eliminar el cliente')
+      }
     },
     async enviarTarjetaCliente(c) {
       this.errorGeneral = ''
@@ -192,7 +197,7 @@ export default {
         await enviarTarjeta(c.id)
         this.mensajeExito = `Tarjeta enviada a ${c.email}`
       } catch (err) {
-        this.errorGeneral = err?.response?.data?.error || 'No se pudo enviar la tarjeta de fidelidad'
+        this.errorGeneral = mensajeDeError(err, 'No se pudo enviar la tarjeta de fidelidad')
       } finally {
         this.enviandoId = null
         setTimeout(() => { this.mensajeExito = '' }, 6000)
@@ -206,7 +211,7 @@ export default {
       try {
         this.previewHtml = await previsualizarTarjetaCliente(c.id)
       } catch (err) {
-        this.previewError = err?.response?.data?.error || 'No se pudo cargar la vista previa'
+        this.previewError = mensajeDeError(err, 'No se pudo cargar la vista previa')
       } finally {
         this.previewCargando = false
       }

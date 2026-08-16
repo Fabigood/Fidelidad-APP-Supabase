@@ -25,13 +25,30 @@ class TarjetaFidelidadService {
       htmlContent
     });
 
-    const registro = await this.tarjetaRepository.create({
-      cliente_id: cliente.id,
-      nivel: cliente.nivel,
-      puntos: cliente.puntos
-    });
+    // El correo ya salió: si falla el registro no se puede deshacer el envío,
+    // así que se deja constancia en el log y se avisa al cliente de la API en
+    // lugar de devolver un 500 que sugeriría que no se envió nada.
+    try {
+      const registro = await this.tarjetaRepository.create({
+        cliente_id: cliente.id,
+        nivel: cliente.nivel,
+        puntos: cliente.puntos
+      });
 
-    return { mensaje: `Tarjeta de fidelidad enviada a ${cliente.email}`, tarjeta: registro };
+      return { mensaje: `Tarjeta de fidelidad enviada a ${cliente.email}`, tarjeta: registro };
+    } catch (err) {
+      console.error(
+        `[INCONSISTENCIA] Se envió la tarjeta a ${cliente.email} (cliente ${cliente.id}) ` +
+        'pero no se pudo registrar el envío:',
+        err
+      );
+
+      return {
+        mensaje: `Tarjeta enviada a ${cliente.email}, pero no se pudo registrar en el historial`,
+        tarjeta: null,
+        registrada: false
+      };
+    }
   }
 
   async listEnviadas() {
@@ -65,7 +82,12 @@ class TarjetaFidelidadService {
   }
 
   async previsualizarEnviada(tarjetaId) {
-    const tarjeta = await this.tarjetaRepository.findById(tarjetaId);
+    const id = Number(tarjetaId);
+    if (!Number.isInteger(id) || id <= 0) {
+      throw new AppError('Tarjeta inválida', 400);
+    }
+
+    const tarjeta = await this.tarjetaRepository.findById(id);
 
     if (!tarjeta) {
       throw new AppError('Tarjeta no encontrada', 404);

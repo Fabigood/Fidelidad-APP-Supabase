@@ -56,7 +56,7 @@
 </template>
 
 <script>
-import { listarTarjetasEnviadas, previsualizarTarjetaEnviada, nivelClass } from '../data/fidelidadStore'
+import { listarTarjetasEnviadas, previsualizarTarjetaEnviada, nivelClass, mensajeDeError } from '../data/fidelidadStore'
 import TarjetaPreviewModal from '../components/TarjetaPreviewModal.vue'
 
 export default {
@@ -85,7 +85,7 @@ export default {
     try {
       this.tarjetas = await listarTarjetasEnviadas()
     } catch (err) {
-      this.error = err?.response?.data?.error || 'No se pudo cargar el historial de tarjetas'
+      this.error = mensajeDeError(err, 'No se pudo cargar el historial de tarjetas')
     } finally {
       this.cargando = false
     }
@@ -105,7 +105,7 @@ export default {
       try {
         this.previewHtml = await previsualizarTarjetaEnviada(t.id)
       } catch (err) {
-        this.previewError = err?.response?.data?.error || 'No se pudo cargar la vista previa'
+        this.previewError = mensajeDeError(err, 'No se pudo cargar la vista previa')
       } finally {
         this.previewCargando = false
       }

@@ -1,22 +1,26 @@
+const { fetchAll } = require('./fetchAll');
+
+const CAMPOS = 'id, nombre, email';
+
 class ClienteRepository {
   constructor(dbClient) {
     this.db = dbClient;
   }
 
   async findAll() {
-    const { data, error } = await this.db
-      .from('clientes')
-      .select('id, nombre, email')
-      .order('id', { ascending: false });
-
-    if (error) throw error;
-    return data || [];
+    return fetchAll((desde, hasta) =>
+      this.db
+        .from('clientes')
+        .select(CAMPOS)
+        .order('id', { ascending: false })
+        .range(desde, hasta)
+    );
   }
 
   async findById(id) {
     const { data, error } = await this.db
       .from('clientes')
-      .select('id, nombre, email')
+      .select(CAMPOS)
       .eq('id', id)
       .maybeSingle();
 
@@ -27,7 +31,7 @@ class ClienteRepository {
   async findByEmail(email) {
     const { data, error } = await this.db
       .from('clientes')
-      .select('id, nombre, email')
+      .select(CAMPOS)
       .eq('email', email)
       .maybeSingle();
 
@@ -36,14 +40,9 @@ class ClienteRepository {
   }
 
   async findDuplicatedEmail(email, exceptId = null) {
-    let query = this.db
-      .from('clientes')
-      .select('id')
-      .eq('email', email);
+    let query = this.db.from('clientes').select('id').eq('email', email).limit(1);
 
-    if (exceptId) {
-      query = query.neq('id', exceptId);
-    }
+    if (exceptId) query = query.neq('id', exceptId);
 
     const { data, error } = await query;
     if (error) throw error;
@@ -54,7 +53,7 @@ class ClienteRepository {
     const { data, error } = await this.db
       .from('clientes')
       .insert([cliente])
-      .select('id, nombre, email')
+      .select(CAMPOS)
       .single();
 
     if (error) throw error;
@@ -66,7 +65,7 @@ class ClienteRepository {
       .from('clientes')
       .update(cliente)
       .eq('id', id)
-      .select('id, nombre, email')
+      .select(CAMPOS)
       .maybeSingle();
 
     if (error) throw error;
@@ -74,12 +73,15 @@ class ClienteRepository {
   }
 
   async delete(id) {
-    const { error } = await this.db
+    const { data, error } = await this.db
       .from('clientes')
       .delete()
-      .eq('id', id);
+      .eq('id', id)
+      .select('id')
+      .maybeSingle();
 
     if (error) throw error;
+    return data;
   }
 }
 

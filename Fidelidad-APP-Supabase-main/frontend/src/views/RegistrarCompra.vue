@@ -48,8 +48,10 @@
           </div>
 
           <div class="actions-row">
-            <button class="primary-btn" @click="registrar">Registrar compra</button>
-            <button class="ghost-btn" @click="limpiar">Limpiar</button>
+            <button class="primary-btn" @click="registrar" :disabled="guardando">
+              {{ guardando ? 'Registrando…' : 'Registrar compra' }}
+            </button>
+            <button class="ghost-btn" @click="limpiar" :disabled="guardando">Limpiar</button>
           </div>
         </template>
       </article>
@@ -75,11 +77,14 @@
         </div>
       </article>
     </div>
+
+    <div v-if="error" class="alert-error">⚠ {{ error }}</div>
+    <div v-if="mensajeExito" class="alert-success">✔ {{ mensajeExito }}</div>
   </section>
 </template>
 
 <script>
-import { HOY, cargarDatos, getClientesAnalizados, registrarCompra, nivelClass } from '../data/fidelidadStore'
+import { HOY, cargarDatos, getClientesAnalizados, registrarCompra, nivelClass, mensajeDeError } from '../data/fidelidadStore'
 
 export default {
   name: 'RegistrarCompra',
@@ -88,7 +93,10 @@ export default {
       clienteId: null,
       busquedaCliente: '',
       monto: null,
-      fecha: HOY
+      fecha: HOY,
+      guardando: false,
+      error: '',
+      mensajeExito: ''
     }
   },
   mounted() {
@@ -118,21 +126,62 @@ export default {
       return String(nombre).split(' ').map(x => x[0]).join('').slice(0, 2).toUpperCase()
     },
     async registrar() {
-      if (!this.monto || this.monto <= 0 || !this.clienteId) return
-      await registrarCompra(this.clienteId, this.monto, this.fecha)
-      this.monto = null
+      this.error = ''
+      this.mensajeExito = ''
+
+      if (!this.clienteId) {
+        this.error = 'Seleccioná un cliente'
+        return
+      }
+      if (!this.monto || this.monto <= 0) {
+        this.error = 'El monto debe ser mayor a cero'
+        return
+      }
+
+      this.guardando = true
+      try {
+        await registrarCompra(this.clienteId, this.monto, this.fecha)
+        this.mensajeExito = 'Compra registrada correctamente'
+        this.monto = null
+        setTimeout(() => { this.mensajeExito = '' }, 4000)
+      } catch (err) {
+        this.error = mensajeDeError(err, 'No se pudo registrar la compra')
+      } finally {
+        this.guardando = false
+      }
     },
     limpiar() {
       this.monto = null
       this.fecha = HOY
       this.clienteId = null
       this.busquedaCliente = ''
+      this.error = ''
+      this.mensajeExito = ''
     }
   }
 }
 </script>
 
 <style scoped>
+.alert-error {
+  background: #fdecea;
+  border: 1px solid #e74c3c;
+  color: #c0392b;
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 0.875rem;
+  margin-bottom: 10px;
+}
+.alert-success {
+  background: #eafaf1;
+  border: 1px solid #2ecc71;
+  color: #1e8449;
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 0.875rem;
+  margin-bottom: 10px;
+}
+
 .required-mark {
   color: #e74c3c;
   font-size: 0.85em;

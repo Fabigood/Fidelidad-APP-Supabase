@@ -1,35 +1,59 @@
+const TTL_RESUMEN_PUBLICO_MS = 60_000;
+
 class FidelidadController {
   constructor({ clienteService, fidelidadService, tarjetaFidelidadService }) {
     this.clienteService = clienteService;
     this.fidelidadService = fidelidadService;
     this.tarjetaFidelidadService = tarjetaFidelidadService;
+    this.cacheResumenPublico = { datos: null, expiraEn: 0 };
   }
 
   getResumen = async (req, res) => {
     res.json(await this.fidelidadService.getResumenAdministrativo());
   };
 
+  /**
+   * Endpoint sin autenticación (evidencia académica).
+   * Se omiten las cifras de facturación —totalVentas y ticketPromedio eran datos
+   * de negocio expuestos públicamente— y se cachea el resultado, porque cada
+   * cálculo recorre cuatro tablas completas y era un DoS barato.
+   */
   getResumenPublico = async (req, res) => {
+    const ahora = Date.now();
+
+    if (this.cacheResumenPublico.datos && ahora < this.cacheResumenPublico.expiraEn) {
+      res.set('X-Cache', 'HIT');
+      return res.json(this.cacheResumenPublico.datos);
+    }
+
     const resumen = await this.fidelidadService.getResumenAdministrativo();
 
-    res.json({
+    const publico = {
       fechaGeneracion: resumen.fechaGeneracion,
       totalClientes: resumen.totalClientes,
       totalCompras: resumen.totalCompras,
-      totalVentas: resumen.totalVentas,
-      ticketPromedio: resumen.ticketPromedio,
       puntosGenerados: resumen.puntosGenerados,
       recompensasDisponibles: resumen.recompensasDisponibles,
       recompensasEntregadas: resumen.recompensasEntregadas,
       retornoPromedio: resumen.retornoPromedio,
       clientesPorNivel: resumen.clientesPorNivel,
       arquitectura: 'API JSON consumida por frontend Vue/Vite',
-      nota: 'Resumen público para evidencia académica, sin datos sensibles de clientes'
-    });
+      nota: 'Resumen público para evidencia académica: sin datos de clientes ni cifras de facturación'
+    };
+
+    this.cacheResumenPublico = { datos: publico, expiraEn: ahora + TTL_RESUMEN_PUBLICO_MS };
+
+    res.set('X-Cache', 'MISS');
+    res.set('Cache-Control', 'public, max-age=60');
+    res.json(publico);
   };
 
   listClientes = async (req, res) => {
     res.json(await this.fidelidadService.getClientesConDetalle());
+  };
+
+  getCliente = async (req, res) => {
+    res.json(await this.fidelidadService.getClienteDetalle(req.params.id));
   };
 
   createCliente = async (req, res) => {
@@ -40,7 +64,12 @@ class FidelidadController {
       await this.tarjetaFidelidadService.enviarTarjeta(cliente.id);
       tarjetaEnviada = true;
     } catch (err) {
-      console.error('No se pudo enviar la tarjeta de fidelidad automáticamente:', err.message);
+      // El alta del cliente ya está confirmada: un fallo de correo no debe
+      // deshacerla, pero sí tiene que quedar registrado y reportado.
+      console.error(
+        `[AVISO] Cliente ${cliente.id} creado, pero falló el envío automático de la tarjeta:`,
+        err.message
+      );
     }
 
     res.status(201).json({
