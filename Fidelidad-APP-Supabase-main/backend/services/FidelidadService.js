@@ -16,7 +16,8 @@ class FidelidadService {
     recompensaRepository,
     reclamoRepository,
     pointsStrategy,
-    levelStrategy
+    levelStrategy,
+    zonaHoraria = 'UTC'
   }) {
     this.clienteRepository = clienteRepository;
     this.compraRepository = compraRepository;
@@ -24,6 +25,12 @@ class FidelidadService {
     this.reclamoRepository = reclamoRepository;
     this.pointsStrategy = pointsStrategy;
     this.levelStrategy = levelStrategy;
+    this.formateadorFecha = new Intl.DateTimeFormat('en-CA', {
+      timeZone: zonaHoraria,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    });
   }
 
   async getClientesConDetalle() {
@@ -38,11 +45,17 @@ class FidelidadService {
     const comprasPorCliente = this.agruparPor(compras, 'cliente_id');
     const reclamosPorCliente = this.agruparPor(reclamos, 'cliente_id');
 
+    // Se devuelve ya analizado: el estado y la probabilidad de retorno son
+    // reglas de negocio y deben calcularse en un unico sitio. Cuando el
+    // frontend las recalculaba por su cuenta, un cliente con una sola compra
+    // salia "En observacion" en el panel y "Sin datos" en el listado.
     return clientes.map((cliente) =>
-      this.buildClienteDetalle(
-        cliente,
-        comprasPorCliente.get(Number(cliente.id)) || [],
-        reclamosPorCliente.get(Number(cliente.id)) || []
+      this.analizarEstadoCliente(
+        this.buildClienteDetalle(
+          cliente,
+          comprasPorCliente.get(Number(cliente.id)) || [],
+          reclamosPorCliente.get(Number(cliente.id)) || []
+        )
       )
     );
   }
@@ -65,7 +78,9 @@ class FidelidadService {
       this.reclamoRepository.findByClienteId(clienteId)
     ]);
 
-    return this.buildClienteDetalle(cliente, compras, reclamos);
+    return this.analizarEstadoCliente(
+      this.buildClienteDetalle(cliente, compras, reclamos)
+    );
   }
 
   async registrarCompra(payload) {
@@ -285,15 +300,17 @@ class FidelidadService {
     const comprasPorCliente = this.agruparPor(compras, 'cliente_id');
     const reclamosPorCliente = this.agruparPor(reclamos, 'cliente_id');
 
-    const clientesDetalle = clientes.map((cliente) =>
-      this.buildClienteDetalle(
-        cliente,
-        comprasPorCliente.get(Number(cliente.id)) || [],
-        reclamosPorCliente.get(Number(cliente.id)) || []
+    const clientesAnalizados = clientes.map((cliente) =>
+      this.analizarEstadoCliente(
+        this.buildClienteDetalle(
+          cliente,
+          comprasPorCliente.get(Number(cliente.id)) || [],
+          reclamosPorCliente.get(Number(cliente.id)) || []
+        )
       )
     );
 
-    const clientesAnalizados = clientesDetalle.map((cliente) => this.analizarEstadoCliente(cliente));
+    const enRiesgo = clientesAnalizados.filter((cliente) => cliente.estado !== 'Activo');
 
     const puntosGenerados = compras.reduce(
       (total, compra) => total + Number(compra.puntos_generados || 0),
@@ -317,9 +334,11 @@ class FidelidadService {
               clientesAnalizados.length
           )
         : 0,
-      clientesPorNivel: this.getClientesPorNivel(clientesDetalle),
-      clientesEnRiesgo: clientesAnalizados
-        .filter((cliente) => cliente.estado !== 'Activo')
+      clientesPorNivel: this.getClientesPorNivel(clientesAnalizados),
+      // El total va aparte de la lista: el panel mostraba la longitud de la
+      // lista recortada, asi que con 20 clientes en riesgo seguia diciendo 5.
+      totalClientesEnRiesgo: enRiesgo.length,
+      clientesEnRiesgo: enRiesgo
         .slice(0, 5)
         .map((cliente) => ({
           id: cliente.id,
@@ -365,21 +384,35 @@ class FidelidadService {
     );
 
     if (!compras.length) {
-      return { ...cliente, estado: 'Sin datos', probabilidadRetorno: 20, ultimaCompra: null };
+      return {
+        ...cliente,
+        estado: 'Sin datos',
+        probabilidadRetorno: 20,
+        intervalo: null,
+        ultimaCompra: null,
+        proximaCompra: null,
+        diasDesdeUltima: null,
+        totalCompras: 0
+      };
     }
+
+    const ultimaCompra = compras[compras.length - 1].fecha;
+    const diasDesdeUltima = this.diffDays(ultimaCompra, this.hoy());
 
     if (compras.length < 2) {
       return {
         ...cliente,
         estado: 'En observación',
         probabilidadRetorno: 45,
-        ultimaCompra: compras[compras.length - 1].fecha
+        intervalo: null,
+        ultimaCompra,
+        proximaCompra: null,
+        diasDesdeUltima,
+        totalCompras: compras.length
       };
     }
 
     const intervalo = this.calcularIntervaloPromedio(compras);
-    const ultimaCompra = compras[compras.length - 1].fecha;
-    const diasDesdeUltima = this.diffDays(ultimaCompra, new Date().toISOString().slice(0, 10));
 
     let estado = 'Activo';
     let probabilidadRetorno = 90;
@@ -399,7 +432,30 @@ class FidelidadService {
       }
     }
 
-    return { ...cliente, estado, probabilidadRetorno, ultimaCompra };
+    return {
+      ...cliente,
+      estado,
+      probabilidadRetorno,
+      intervalo: Number(intervalo.toFixed(1)),
+      ultimaCompra,
+      proximaCompra: this.sumarDias(ultimaCompra, Math.round(intervalo)),
+      diasDesdeUltima,
+      totalCompras: compras.length
+    };
+  }
+
+  /**
+   * Fecha de hoy en la zona horaria del negocio (formato AAAA-MM-DD).
+   * en-CA produce exactamente ese formato.
+   */
+  hoy() {
+    return this.formateadorFecha.format(new Date());
+  }
+
+  sumarDias(fechaISO, dias) {
+    const base = new Date(`${String(fechaISO).slice(0, 10)}T00:00:00Z`);
+    base.setUTCDate(base.getUTCDate() + Number(dias || 0));
+    return base.toISOString().slice(0, 10);
   }
 
   calcularIntervaloPromedio(compras) {

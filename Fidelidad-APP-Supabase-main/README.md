@@ -40,7 +40,8 @@ Este proyecto fue refactorizado para evidenciar la aplicación de buenas prácti
      - `backend/repositories/CompraRepository.js`
      - `backend/repositories/RecompensaRepository.js`
      - `backend/repositories/ReclamoRepository.js`
-   - Beneficio: el acceso a Supabase queda aislado. El resto del sistema no depende de consultas directas a la base de datos.
+     - `backend/repositories/TarjetaRepository.js`
+   - Beneficio: el acceso a Supabase queda aislado. El resto del sistema no depende de consultas directas a la base de datos. La paginación de `fetchAll.js` se aplica en un solo sitio y todos los repositorios la heredan.
 
 2. **Strategy Pattern**
    - Implementado en:
@@ -56,40 +57,58 @@ Este proyecto fue refactorizado para evidenciar la aplicación de buenas prácti
 
 ```txt
 backend/
-├── controllers/
+├── controllers/          Reciben la petición HTTP y devuelven la respuesta
 │   ├── AuthController.js
 │   ├── ClienteController.js
 │   └── FidelidadController.js
 ├── core/
-│   ├── AppError.js
-│   └── container.js
+│   ├── AppError.js       Error de dominio con código HTTP
+│   ├── config.js         Configuración validada de una sola vez
+│   └── container.js      Inyección de dependencias
 ├── middleware/
-│   ├── auth.js
-│   └── errorHandler.js
-├── repositories/
-│   ├── UserRepository.js
+│   ├── auth.js           Verificación de JWT (HS256 + expiración)
+│   ├── errorHandler.js   Manejo central de errores
+│   ├── notFound.js       404 en formato JSON
+│   └── rateLimiter.js    Límites por IP (login, API, correo, público)
+├── repositories/         Único punto de acceso a Supabase
 │   ├── ClienteRepository.js
 │   ├── CompraRepository.js
+│   ├── ReclamoRepository.js
 │   ├── RecompensaRepository.js
-│   └── ReclamoRepository.js
-├── routes/
+│   ├── TarjetaRepository.js
+│   ├── UserRepository.js
+│   └── fetchAll.js       Paginación (evita el corte silencioso en 1000 filas)
+├── routes/               Solo definen endpoints
 │   ├── auth.js
 │   ├── clientes.js
 │   └── fidelidad.js
-├── services/
+├── scripts/
+│   ├── crearAdmin.js     Alta del administrador con hash bcrypt
+│   └── verificarEntorno.js  Comprobación previa al despliegue
+├── services/             Reglas de negocio
 │   ├── AuthService.js
 │   ├── ClienteService.js
 │   ├── FidelidadService.js
+│   ├── TarjetaFidelidadService.js
+│   ├── email/
+│   │   └── BrevoEmailProvider.js
 │   └── strategies/
-│       ├── pointsStrategy.js
-│       └── levelStrategy.js
-├── validators/
-│   └── emailValidator.js
+│       ├── levelStrategy.js
+│       └── pointsStrategy.js
+├── tests/
+│   └── seguridad.test.js Pruebas de regresión
 ├── utils/
 │   ├── asyncHandler.js
-│   └── dateFormatter.js
+│   ├── dateFormatter.js
+│   └── tarjetaTemplate.js
+├── validators/
+│   ├── dateValidator.js
+│   ├── emailValidator.js
+│   └── index.js
+├── .env.example
 ├── index.js
-└── supabase.js
+├── supabase.js
+└── supabase.sql          Esquema + Row Level Security
 ```
 
 ### Mejoras implementadas en el Core
@@ -100,6 +119,21 @@ backend/
 - Se mejoró el middleware de autenticación para aceptar token directo o formato `Bearer token`.
 - Se mantuvieron los mismos endpoints para no romper el frontend existente.
 - Se agregó endpoint de verificación: `GET /api/health`.
+
+### Calidad y pruebas
+
+El backend incluye una batería de pruebas de regresión sobre los fallos de
+seguridad detectados en la auditoría:
+
+```bash
+cd backend
+npm test          # 26 pruebas: validaciones, hashing, errores, paginación
+npm run verificar # comprobación de la configuración antes de desplegar
+```
+
+La integración continua (`.github/workflows/ci.yml`) ejecuta en cada push las
+pruebas, la auditoría de vulnerabilidades, la compilación del frontend y una
+comprobación de que no se haya colado ninguna credencial en el repositorio.
 
 ### Guion sugerido para el video
 

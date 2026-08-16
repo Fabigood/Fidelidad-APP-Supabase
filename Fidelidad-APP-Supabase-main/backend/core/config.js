@@ -20,6 +20,22 @@ function lista(nombre, porDefecto = []) {
   return valor.split(',').map((item) => item.trim().replace(/\/$/, '')).filter(Boolean);
 }
 
+/** Entero validado: un valor no numérico daba NaN en silencio. */
+function entero(nombre, porDefecto, { min = 0, max = Number.MAX_SAFE_INTEGER } = {}) {
+  const bruto = process.env[nombre];
+  if (bruto === undefined || String(bruto).trim() === '') return porDefecto;
+
+  const valor = Number(String(bruto).trim());
+
+  if (!Number.isInteger(valor) || valor < min || valor > max) {
+    throw new Error(
+      `${nombre} debe ser un número entero entre ${min} y ${max}. Valor recibido: "${bruto}".`
+    );
+  }
+
+  return valor;
+}
+
 const jwtSecret = requerido('JWT_SECRET');
 
 // El secreto de ejemplo circula en el README y en el repositorio publico:
@@ -60,14 +76,41 @@ if (isProduction && !usandoServiceRole) {
   );
 }
 
+// Zona horaria del negocio. Las fechas de compra las envia el navegador en hora
+// local, pero el VPS suele estar en UTC: sin esto, cada tarde el servidor
+// considera que ya es manana y calcula un dia de mas desde la ultima compra.
+const zonaHoraria = String(process.env.APP_TIMEZONE || 'UTC').trim();
+
+try {
+  new Intl.DateTimeFormat('en-CA', { timeZone: zonaHoraria });
+} catch {
+  throw new Error(
+    `APP_TIMEZONE="${zonaHoraria}" no es una zona horaria valida. Ejemplo: America/Guayaquil.`
+  );
+}
+
+const corsOrigins = lista('CORS_ORIGINS', isProduction ? [] : ['http://localhost:5173']);
+
+// Sin origenes permitidos el navegador bloquea todas las peticiones del panel.
+// Arrancar igual dejaba una aplicacion viva pero inutilizable, con un fallo
+// dificil de diagnosticar desde el lado del cliente.
+if (isProduction && corsOrigins.length === 0) {
+  throw new Error(
+    'CORS_ORIGINS está vacío. Definí el dominio del frontend, por ejemplo: ' +
+    'CORS_ORIGINS=https://tudominio.com'
+  );
+}
+
 module.exports = {
   isProduction,
   // Adjuntar el error interno a la respuesta es opt-in explicito. Depender de
   // NODE_ENV significaria filtrar detalles internos si alguien olvida definirlo.
   exponerDetallesDeError: String(process.env.EXPOSE_ERROR_DETAILS || '').trim() === 'true',
-  port: Number(process.env.PORT) || 3000,
-  trustProxy: Number(process.env.TRUST_PROXY ?? 1),
-  corsOrigins: lista('CORS_ORIGINS', isProduction ? [] : ['http://localhost:5173']),
+  port: entero('PORT', 3000, { min: 1, max: 65535 }),
+  // Debe coincidir con la cantidad real de proxies delante (nginx = 1).
+  trustProxy: entero('TRUST_PROXY', 1, { min: 0, max: 10 }),
+  corsOrigins,
+  zonaHoraria,
   jwt: {
     secret: jwtSecret,
     expiresIn: String(process.env.JWT_EXPIRES_IN || '8h'),

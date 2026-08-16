@@ -10,77 +10,131 @@
 
     <div class="crud-grid">
       <article class="panel-card form-card">
-        <h2>{{ editando ? 'Editar cliente' : 'Registrar cliente' }}</h2>
+        <h2 id="titulo-formulario">{{ editando ? 'Editar cliente' : 'Registrar cliente' }}</h2>
 
-        <label>Nombre</label>
-        <input
-          v-model="form.nombre"
-          placeholder="Nombre completo"
-          :class="{ 'input-error': errores.nombre }"
-          @input="errores.nombre = ''"
-        />
-        <p class="field-error" v-if="errores.nombre">{{ errores.nombre }}</p>
+        <form aria-labelledby="titulo-formulario" @submit.prevent="guardar">
+          <label for="cliente-nombre">Nombre <span class="required-mark" aria-hidden="true">*</span></label>
+          <input
+            id="cliente-nombre"
+            v-model="form.nombre"
+            placeholder="Nombre completo"
+            required
+            maxlength="120"
+            autocomplete="name"
+            :class="{ 'input-error': errores.nombre }"
+            :aria-invalid="errores.nombre ? 'true' : 'false'"
+            :aria-describedby="errores.nombre ? 'error-nombre' : undefined"
+            @input="errores.nombre = ''"
+          />
+          <p class="field-error" v-if="errores.nombre" id="error-nombre">{{ errores.nombre }}</p>
 
-        <label>Correo electrónico <span class="required-mark">*</span></label>
-        <input
-          v-model="form.email"
-          placeholder="correo@email.com"
-          :class="{ 'input-error': errores.email }"
-          @input="errores.email = ''"
-        />
-        <p class="field-error" v-if="errores.email">{{ errores.email }}</p>
+          <label for="cliente-email">Correo electrónico <span class="required-mark" aria-hidden="true">*</span></label>
+          <input
+            id="cliente-email"
+            v-model="form.email"
+            type="email"
+            placeholder="correo@email.com"
+            required
+            maxlength="254"
+            autocomplete="email"
+            :class="{ 'input-error': errores.email }"
+            :aria-invalid="errores.email ? 'true' : 'false'"
+            aria-describedby="ayuda-email"
+            @input="errores.email = ''"
+          />
+          <p class="field-error" v-if="errores.email" id="error-email" role="alert">{{ errores.email }}</p>
 
-        <p class="helper-text">
-          El correo es un dato sensible único por cliente. Será validado en el servidor antes de guardarse.
-        </p>
+          <p class="helper-text" id="ayuda-email">
+            El correo es un dato sensible único por cliente. Será validado en el servidor antes de guardarse.
+          </p>
 
-        <div v-if="errorGeneral" class="alert-error">⚠ {{ errorGeneral }}</div>
-        <div v-if="mensajeExito" class="alert-success">✔ {{ mensajeExito }}</div>
+          <div v-if="errorGeneral" class="alert-error" role="alert">
+            <span aria-hidden="true">⚠</span> {{ errorGeneral }}
+          </div>
+          <div v-if="mensajeExito" class="alert-success" role="status">
+            <span aria-hidden="true">✔</span> {{ mensajeExito }}
+          </div>
 
-        <div class="actions-row">
-          <button class="primary-btn" @click="guardar" :disabled="guardando">
-            {{ guardando ? 'Guardando…' : (editando ? 'Actualizar' : 'Agregar') }}
-          </button>
-          <button class="ghost-btn" v-if="editando" @click="cancelar">Cancelar</button>
-        </div>
+          <div class="actions-row">
+            <button class="primary-btn" type="submit" :disabled="guardando">
+              {{ guardando ? 'Guardando…' : (editando ? 'Actualizar' : 'Agregar') }}
+            </button>
+            <button class="ghost-btn" type="button" v-if="editando" @click="cancelar">Cancelar</button>
+          </div>
+        </form>
       </article>
 
       <article class="panel-card table-card">
         <div class="table-head">
-          <h2>Listado de clientes</h2>
-          <input v-model="filtro" class="search" placeholder="Buscar..." />
+          <h2 id="titulo-listado">Listado de clientes</h2>
+          <div>
+            <label for="buscar-cliente" class="sr-only">Buscar clientes por nombre, correo o nivel</label>
+            <input
+              id="buscar-cliente"
+              v-model="filtro"
+              type="search"
+              class="search"
+              placeholder="Buscar..."
+            />
+          </div>
         </div>
 
-        <table>
+        <p v-if="state.loading" class="helper-text" role="status">Cargando clientes…</p>
+        <p v-else-if="!totalItems" class="helper-text">
+          {{ filtro ? 'Ningún cliente coincide con la búsqueda.' : 'Todavía no hay clientes registrados.' }}
+        </p>
+
+        <table v-else aria-describedby="titulo-listado">
+          <caption class="sr-only">
+            Clientes registrados con sus puntos, nivel interno y probabilidad de retorno
+          </caption>
           <thead>
             <tr>
-              <th>Cliente</th>
-              <th>Correo</th>
-              <th>Puntos</th>
-              <th>Nivel interno</th>
-              <th>Prob. retorno</th>
-              <th>Acciones</th>
+              <th scope="col">Cliente</th>
+              <th scope="col">Correo</th>
+              <th scope="col">Puntos</th>
+              <th scope="col">Nivel interno</th>
+              <th scope="col">Prob. retorno</th>
+              <th scope="col">Acciones</th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="c in clientesFiltrados" :key="c.id">
-              <td><strong>{{ c.nombre }}</strong></td>
+            <tr v-for="c in itemsPagina" :key="c.id">
+              <th scope="row"><strong>{{ c.nombre }}</strong></th>
               <td>{{ c.email }}</td>
               <td>{{ c.puntos }} pts</td>
               <td><span class="badge" :class="nivelClass(c.nivel)">{{ c.nivel }}</span></td>
               <td><strong>{{ c.probabilidadRetorno }}%</strong></td>
               <td class="row-actions">
-                <button @click="$router.push('/admin/clientes/' + c.id)">Ver</button>
-                <button @click="editar(c)">Editar</button>
+                <button @click="$router.push('/admin/clientes/' + c.id)">
+                  Ver<span class="sr-only"> el perfil de {{ c.nombre }}</span>
+                </button>
+                <button @click="editar(c)">
+                  Editar<span class="sr-only"> a {{ c.nombre }}</span>
+                </button>
                 <button :disabled="enviandoId === c.id" @click="enviarTarjetaCliente(c)">
                   {{ enviandoId === c.id ? 'Enviando…' : 'Enviar tarjeta' }}
+                  <span class="sr-only"> a {{ c.nombre }}</span>
                 </button>
-                <button @click="verTarjeta(c)">Vista previa</button>
-                <button class="delete" @click="eliminar(c.id)">Eliminar</button>
+                <button @click="verTarjeta(c)">
+                  Vista previa<span class="sr-only"> de la tarjeta de {{ c.nombre }}</span>
+                </button>
+                <button class="delete" @click="eliminar(c)">
+                  Eliminar<span class="sr-only"> a {{ c.nombre }}</span>
+                </button>
               </td>
             </tr>
           </tbody>
         </table>
+
+        <PaginacionTabla
+          :total-items="totalItems"
+          :pagina-actual="paginaActual"
+          :por-pagina="porPagina"
+          etiqueta="clientes"
+          @cambiar-pagina="cambiarPagina"
+          @cambiar-tamano="cambiarTamano"
+        />
       </article>
     </div>
 
@@ -95,14 +149,18 @@
 </template>
 
 <script>
-import { cargarDatos, getClientesAnalizados, guardarCliente, eliminarCliente, enviarTarjeta, previsualizarTarjetaCliente, nivelClass, mensajeDeError } from '../data/fidelidadStore'
+import { state, cargarDatos, getClientesAnalizados, guardarCliente, eliminarCliente, enviarTarjeta, previsualizarTarjetaCliente, nivelClass, mensajeDeError } from '../data/fidelidadStore'
 import TarjetaPreviewModal from '../components/TarjetaPreviewModal.vue'
+import PaginacionTabla from '../components/PaginacionTabla.vue'
+import { paginacionMixin } from '../utils/paginacion'
 
 export default {
   name: 'Clientes',
-  components: { TarjetaPreviewModal },
+  components: { TarjetaPreviewModal, PaginacionTabla },
+  mixins: [paginacionMixin],
   data() {
     return {
+      state,
       filtro: '',
       form: { id: null, nombre: '', email: '' },
       editando: null,
@@ -124,10 +182,15 @@ export default {
     clientes() {
       return getClientesAnalizados()
     },
-    clientesFiltrados() {
+    itemsPaginables() {
       const term = this.filtro.trim().toLowerCase()
       if (!term) return this.clientes
       return this.clientes.filter(c => (c.nombre + ' ' + c.email + ' ' + c.nivel).toLowerCase().includes(term))
+    }
+  },
+  watch: {
+    filtro() {
+      this.reiniciarPaginacion()
     }
   },
   methods: {
@@ -159,16 +222,12 @@ export default {
         }
       } catch (err) {
         const data = err?.response?.data
-        if (data) {
-          if (data.campo === 'email') {
-            this.errores.email = data.error
-          } else if (data.campo === 'nombre') {
-            this.errores.nombre = data.error
-          } else {
-            this.errorGeneral = data.error || 'Error al guardar el cliente'
-          }
+        if (data?.campo === 'email') {
+          this.errores.email = data.error
+        } else if (data?.campo === 'nombre') {
+          this.errores.nombre = data.error
         } else {
-          this.errorGeneral = 'No se pudo conectar con el servidor'
+          this.errorGeneral = mensajeDeError(err, 'Error al guardar el cliente')
         }
       } finally {
         this.guardando = false
@@ -179,12 +238,13 @@ export default {
       this.form = { id: c.id, nombre: c.nombre, email: c.email }
       this.errores = { nombre: '', email: '' }
       this.errorGeneral = ''
+      this.$nextTick(() => document.getElementById('cliente-nombre')?.focus())
     },
-    async eliminar(id) {
-      if (!confirm('¿Eliminar este cliente? Se borrarán también sus compras y recompensas.')) return
+    async eliminar(c) {
+      if (!confirm(`¿Eliminar a ${c.nombre}? Se borrarán también sus compras y recompensas.`)) return
       this.errorGeneral = ''
       try {
-        await eliminarCliente(id)
+        await eliminarCliente(c.id)
       } catch (err) {
         this.errorGeneral = mensajeDeError(err, 'No se pudo eliminar el cliente')
       }
@@ -224,6 +284,7 @@ export default {
     },
     nuevo() {
       this.cancelar()
+      this.$nextTick(() => document.getElementById('cliente-nombre')?.focus())
     }
   }
 }

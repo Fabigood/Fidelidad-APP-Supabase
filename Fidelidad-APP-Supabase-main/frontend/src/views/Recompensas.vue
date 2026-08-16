@@ -13,8 +13,10 @@
       <!-- ── PASO 1: Seleccionar cliente (dropdown, no input FK) ── -->
       <article class="panel-card form-card">
         <h2><span class="step-badge">1</span> Seleccionar cliente</h2>
-        <label>Cliente <span class="required-mark">*</span></label>
-        <select v-model.number="clienteId" @change="recompensaId = null">
+        <label for="recompensa-cliente">
+          Cliente <span class="required-mark" aria-hidden="true">*</span>
+        </label>
+        <select id="recompensa-cliente" v-model.number="clienteId">
           <option value="" disabled>— Elige un cliente —</option>
           <option v-for="c in clientes" :key="c.id" :value="c.id">{{ c.nombre }} — {{ c.email }}</option>
         </select>
@@ -43,13 +45,13 @@
         </div>
 
         <template v-if="clienteId && cliente">
-          <label>
+          <label for="recompensa-seleccion">
             Recompensas disponibles para nivel
             <em class="badge" :class="nivelClass(cliente.nivel)">{{ cliente.nivel }}</em>
           </label>
 
           <!-- Dropdown que se carga dinámicamente según el nivel del cliente seleccionado -->
-          <select v-model.number="recompensaId" class="reward-select">
+          <select id="recompensa-seleccion" v-model.number="recompensaId" class="reward-select">
             <option value="" disabled>— Elige una recompensa —</option>
             <option
               v-for="item in recompensasDisponibles"
@@ -71,12 +73,16 @@
           </div>
 
           <div class="actions-row">
-            <button class="primary-btn" @click="entregar" :disabled="!recompensaId || entregando">
-              Entregar recompensa
+            <button class="primary-btn" @click="entregar" :disabled="!recompensaSeleccionada || entregando">
+              {{ entregando ? 'Entregando…' : 'Entregar recompensa' }}
             </button>
           </div>
-          <p v-if="mensaje" class="success-msg">✓ {{ mensaje }}</p>
-          <div v-if="error" class="alert-error">⚠ {{ error }}</div>
+          <p v-if="mensaje" class="success-msg" role="status">
+            <span aria-hidden="true">✓</span> {{ mensaje }}
+          </p>
+          <div v-if="error" class="alert-error" role="alert">
+            <span aria-hidden="true">⚠</span> {{ error }}
+          </div>
         </template>
       </article>
     </div>
@@ -96,7 +102,7 @@
 </template>
 
 <script>
-import { HOY, cargarDatos, getClientesAnalizados, getCliente, analizarCliente, recompensaSugerida, recompensasPorNivel, entregarRecompensa, nivelClass, mensajeDeError } from '../data/fidelidadStore'
+import { hoy, cargarDatos, getClientesAnalizados, getCliente, analizarCliente, recompensaSugerida, recompensasPorNivel, entregarRecompensa, nivelClass, mensajeDeError } from '../data/fidelidadStore'
 
 export default {
   name: 'Recompensas',
@@ -137,16 +143,20 @@ export default {
     }
   },
   watch: {
-    // Al cambiar de cliente, auto-preseleccionar la recompensa sugerida
-    clienteId: {
+    // Al cambiar de cliente, preseleccionar la recompensa sugerida.
+    // Un solo watcher sobre las opciones disponibles: antes había dos
+    // (clienteId y sugerida) que se pisaban entre sí según el orden de
+    // evaluación, y además el @change del select ya ponía recompensaId a null.
+    recompensasDisponibles: {
       immediate: true,
-      handler() {
-        this.recompensaId = this.sugerida?.id || this.recompensasDisponibles[0]?.id || null
+      handler(opciones) {
+        const sigueSiendoValida = opciones.some(r => r.id === this.recompensaId)
+        if (sigueSiendoValida) return
+
+        // Solo se preselecciona algo que exista realmente en el desplegable.
+        this.recompensaId = this.sugerida?.id ?? opciones[0]?.id ?? null
         this.mensaje = ''
       }
-    },
-    sugerida(val) {
-      this.recompensaId = val?.id || this.recompensasDisponibles[0]?.id || null
     }
   },
   methods: {
@@ -163,7 +173,7 @@ export default {
       const item = this.recompensaSeleccionada
       this.entregando = true
       try {
-        const registro = await entregarRecompensa(this.clienteId, this.recompensaId, HOY)
+        const registro = await entregarRecompensa(this.clienteId, this.recompensaId, hoy())
         if (registro) this.mensaje = 'Recompensa entregada: ' + (item ? item.nombre : 'registrada')
       } catch (err) {
         this.error = mensajeDeError(err, 'No se pudo entregar la recompensa')

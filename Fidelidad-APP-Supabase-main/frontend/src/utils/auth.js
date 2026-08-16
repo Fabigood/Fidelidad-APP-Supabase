@@ -34,3 +34,21 @@ export function isAuthenticated() {
   if (token) clearToken()
   return false
 }
+
+/**
+ * Milisegundos que le quedan a la sesión, o 0 si ya expiró.
+ *
+ * Permite avisar antes de que el token caduque. Sin esto, el usuario seguía
+ * trabajando hasta que una petición devolvía 401 y lo expulsaba de golpe,
+ * perdiendo lo que estuviera escribiendo.
+ */
+export function tiempoRestanteMs(token = getToken()) {
+  if (!token) return 0
+  const payload = decodePayload(token)
+  if (!payload?.exp) return 0
+  return Math.max(0, payload.exp * 1000 - Date.now())
+}
+
+export function usuarioActual(token = getToken()) {
+  return decodePayload(token || '')?.username || null
+}

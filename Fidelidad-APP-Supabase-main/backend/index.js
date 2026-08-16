@@ -5,6 +5,7 @@ const compression = require('compression');
 const morgan = require('morgan');
 
 const config = require('./core/config');
+const AppError = require('./core/AppError');
 const authMiddleware = require('./middleware/auth');
 const errorHandler = require('./middleware/errorHandler');
 const notFound = require('./middleware/notFound');
@@ -13,7 +14,7 @@ const authRoutes = require('./routes/auth');
 const clientesRoutes = require('./routes/clientes');
 const fidelidadRoutes = require('./routes/fidelidad');
 const asyncHandler = require('./utils/asyncHandler');
-const { fidelidadController } = require('./core/container');
+const { fidelidadController, clienteRepository } = require('./core/container');
 
 const app = express();
 
@@ -35,7 +36,7 @@ app.use(
       }
     },
     hsts: config.isProduction
-      ? { maxAge: 31_536_000, includeSubDomains: true, preload: true }
+      ? { maxAge: 31536000, includeSubDomains: true, preload: true }
       : false,
     crossOriginResourcePolicy: { policy: 'same-site' }
   })
@@ -44,34 +45,60 @@ app.use(
 app.use(compression());
 app.use(morgan(config.isProduction ? 'combined' : 'dev'));
 
-app.use(
-  cors({
-    origin(origin, callback) {
-      // Sin cabecera Origin: peticiones del mismo origen, curl o health checks.
-      if (!origin) return callback(null, true);
-      if (config.corsOrigins.includes(origin.replace(/\/$/, ''))) return callback(null, true);
-      return callback(new Error('Origen no permitido por CORS'));
-    },
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
-    maxAge: 86_400
-  })
-);
+// Un origen no permitido es un error del cliente (403), no del servidor.
+// Lanzarlo como excepción genérica producía un 500 y volcaba una traza completa
+// en el log por cada petición: ruido que enmascara los fallos reales.
+const corsOptions = {
+  origin(origin, callback) {
+    // Sin cabecera Origin: peticiones del mismo origen, curl o health checks.
+    if (!origin) return callback(null, true);
+    if (config.corsOrigins.includes(origin.replace(/\/$/, ''))) return callback(null, true);
+    return callback(null, false);
+  },
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  maxAge: 86400
+};
+
+app.use(cors(corsOptions));
+
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  if (!origin || config.corsOrigins.includes(origin.replace(/\/$/, ''))) return next();
+  next(new AppError('Origen no permitido', 403));
+});
 
 app.use(express.json({ limit: '100kb' }));
 
+// Sonda de vida: responde mientras el proceso siga en pie. La usan PM2 y systemd
+// para decidir si reiniciar.
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', uptime: Math.round(process.uptime()) });
 });
 
+// Sonda de disponibilidad: comprueba además que la base responda. Antes /health
+// devolvía "ok" con Supabase caído, así que ningún monitor detectaba la avería.
+app.get(
+  '/api/health/ready',
+  asyncHandler(async (req, res) => {
+    const inicio = Date.now();
+    try {
+      await clienteRepository.findDuplicatedEmail('__healthcheck__');
+      res.json({
+        status: 'ok',
+        baseDeDatos: 'ok',
+        latenciaMs: Date.now() - inicio,
+        uptime: Math.round(process.uptime())
+      });
+    } catch (err) {
+      console.error('[HEALTH] La base de datos no responde:', err.message);
+      res.status(503).json({ status: 'degradado', baseDeDatos: 'sin respuesta' });
+    }
+  })
+);
+
 app.get('/', (req, res) => {
-  res.json({
-    mensaje: 'Backend de Fidelidad APP funcionando correctamente',
-    arquitectura: 'MVC + SOLID + patrones de diseño',
-    apiHealth: '/api/health',
-    apiJsonPublico: '/api/fidelidad/resumen-publico',
-    apiJsonAdmin: '/api/fidelidad/resumen'
-  });
+  res.json({ mensaje: 'Backend de Fidelidad APP', apiHealth: '/api/health' });
 });
 
 app.use('/api', apiRateLimiter);
@@ -100,7 +127,7 @@ function apagar(senal) {
     console.log('Servidor cerrado correctamente');
     process.exit(0);
   });
-  setTimeout(() => process.exit(1), 10_000).unref();
+  setTimeout(() => process.exit(1), 10000).unref();
 }
 
 process.on('SIGTERM', () => apagar('SIGTERM'));

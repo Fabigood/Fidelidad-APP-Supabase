@@ -12,17 +12,28 @@
         <h2>Datos de la compra</h2>
 
         <!-- ── Selector de cliente (Requisito 2: dropdown con búsqueda, no input FK) ── -->
-        <label>Cliente <span class="required-mark">*</span></label>
-
-        <!-- Campo de búsqueda para filtrar el dropdown -->
+        <label for="buscar-cliente-compra">Buscar cliente</label>
+        <!-- Buscar ya no borra la selección: hacerlo ocultaba el formulario
+             (está bajo v-if="clienteId") y se perdía el monto ya escrito. -->
         <input
+          id="buscar-cliente-compra"
           v-model="busquedaCliente"
+          type="search"
           class="search-inline"
           placeholder="Buscar cliente por nombre o correo…"
-          @input="clienteId = null"
         />
 
-        <select v-model.number="clienteId" size="5" class="select-list">
+        <label for="select-cliente-compra">
+          Cliente <span class="required-mark" aria-hidden="true">*</span>
+        </label>
+
+        <select
+          id="select-cliente-compra"
+          v-model.number="clienteId"
+          size="5"
+          class="select-list"
+          required
+        >
           <option v-if="clientesFiltrados.length === 0" disabled value="">Sin resultados</option>
           <option
             v-for="c in clientesFiltrados"
@@ -36,13 +47,25 @@
         <p class="helper-text" v-if="!clienteId">Busca y selecciona un cliente de la lista.</p>
 
         <template v-if="clienteId">
-          <label>Monto ($)</label>
-          <input v-model.number="monto" type="number" min="0" step="0.01" placeholder="0.00" />
+          <label for="compra-monto">
+            Monto ($) <span class="required-mark" aria-hidden="true">*</span>
+          </label>
+          <input
+            id="compra-monto"
+            v-model.number="monto"
+            type="number"
+            min="0.01"
+            step="0.01"
+            placeholder="0.00"
+            required
+            aria-describedby="ayuda-puntos"
+          />
 
-          <label>Fecha</label>
-          <input v-model="fecha" type="date" />
+          <!-- max impide registrar compras con fecha futura -->
+          <label for="compra-fecha">Fecha</label>
+          <input id="compra-fecha" v-model="fecha" type="date" :max="maxFecha" required />
 
-          <div class="points-preview">
+          <div class="points-preview" id="ayuda-puntos" aria-live="polite">
             <span>Puntos a generar</span>
             <strong>{{ puntosGenerados }} pts</strong>
           </div>
@@ -78,13 +101,17 @@
       </article>
     </div>
 
-    <div v-if="error" class="alert-error">⚠ {{ error }}</div>
-    <div v-if="mensajeExito" class="alert-success">✔ {{ mensajeExito }}</div>
+    <div v-if="error" class="alert-error" role="alert">
+      <span aria-hidden="true">⚠</span> {{ error }}
+    </div>
+    <div v-if="mensajeExito" class="alert-success" role="status">
+      <span aria-hidden="true">✔</span> {{ mensajeExito }}
+    </div>
   </section>
 </template>
 
 <script>
-import { HOY, cargarDatos, getClientesAnalizados, registrarCompra, nivelClass, mensajeDeError } from '../data/fidelidadStore'
+import { hoy, cargarDatos, getClientesAnalizados, registrarCompra, nivelClass, mensajeDeError } from '../data/fidelidadStore'
 
 export default {
   name: 'RegistrarCompra',
@@ -93,7 +120,7 @@ export default {
       clienteId: null,
       busquedaCliente: '',
       monto: null,
-      fecha: HOY,
+      fecha: hoy(),
       guardando: false,
       error: '',
       mensajeExito: ''
@@ -118,6 +145,9 @@ export default {
     },
     puntosGenerados() {
       return this.monto > 0 ? Math.floor(this.monto) : 0
+    },
+    maxFecha() {
+      return hoy()
     }
   },
   methods: {
@@ -137,6 +167,10 @@ export default {
         this.error = 'El monto debe ser mayor a cero'
         return
       }
+      if (this.fecha > hoy()) {
+        this.error = 'La fecha no puede ser posterior a hoy'
+        return
+      }
 
       this.guardando = true
       try {
@@ -152,7 +186,7 @@ export default {
     },
     limpiar() {
       this.monto = null
-      this.fecha = HOY
+      this.fecha = hoy()
       this.clienteId = null
       this.busquedaCliente = ''
       this.error = ''

@@ -1,9 +1,34 @@
 <template>
-  <div v-if="visible" class="tarjeta-modal-overlay" @click.self="$emit('close')">
-    <div class="tarjeta-modal-box">
-      <button class="tarjeta-modal-close" type="button" @click="$emit('close')">✕</button>
-      <div v-if="cargando" class="tarjeta-modal-loading">Cargando vista previa…</div>
-      <div v-else-if="error" class="tarjeta-modal-error">⚠ {{ error }}</div>
+  <div
+    v-if="visible"
+    class="tarjeta-modal-overlay"
+    @click.self="$emit('close')"
+  >
+    <div
+      ref="caja"
+      class="tarjeta-modal-box"
+      role="dialog"
+      aria-modal="true"
+      :aria-label="`Vista previa de la tarjeta de fidelidad`"
+      @keydown.esc="$emit('close')"
+      @keydown.tab="atraparFoco"
+    >
+      <button
+        ref="cerrar"
+        class="tarjeta-modal-close"
+        type="button"
+        aria-label="Cerrar la vista previa"
+        @click="$emit('close')"
+      >
+        <span aria-hidden="true">✕</span>
+      </button>
+
+      <div v-if="cargando" class="tarjeta-modal-loading" role="status">
+        Cargando vista previa…
+      </div>
+      <div v-else-if="error" class="tarjeta-modal-error" role="alert">
+        <span aria-hidden="true">⚠</span> {{ error }}
+      </div>
       <iframe
         v-else
         :srcdoc="html"
@@ -24,7 +49,55 @@ export default {
     cargando: { type: Boolean, default: false },
     error: { type: String, default: '' }
   },
-  emits: ['close']
+  emits: ['close'],
+  data() {
+    return { elementoPrevio: null }
+  },
+  watch: {
+    visible(abierto) {
+      if (abierto) this.alAbrir()
+      else this.alCerrar()
+    }
+  },
+  beforeUnmount() {
+    this.alCerrar()
+  },
+  methods: {
+    alAbrir() {
+      // Se recuerda quién tenía el foco para devolvérselo al cerrar: si no, el
+      // foco vuelve al principio del documento y hay que tabular de nuevo
+      // hasta donde estabas.
+      this.elementoPrevio = document.activeElement
+      document.body.style.overflow = 'hidden'
+      this.$nextTick(() => this.$refs.cerrar?.focus())
+    },
+    alCerrar() {
+      document.body.style.overflow = ''
+      if (this.elementoPrevio?.focus) this.elementoPrevio.focus()
+      this.elementoPrevio = null
+    },
+    /**
+     * Mantiene el tabulador dentro del diálogo. Sin esto se puede tabular
+     * hasta los controles de detrás, que están tapados por la superposición.
+     */
+    atraparFoco(evento) {
+      const enfocables = this.$refs.caja?.querySelectorAll(
+        'button, [href], input, select, textarea, iframe, [tabindex]:not([tabindex="-1"])'
+      )
+      if (!enfocables?.length) return
+
+      const primero = enfocables[0]
+      const ultimo = enfocables[enfocables.length - 1]
+
+      if (evento.shiftKey && document.activeElement === primero) {
+        evento.preventDefault()
+        ultimo.focus()
+      } else if (!evento.shiftKey && document.activeElement === ultimo) {
+        evento.preventDefault()
+        primero.focus()
+      }
+    }
+  }
 }
 </script>
 
@@ -63,6 +136,10 @@ export default {
   cursor: pointer;
   font-size: 14px;
   line-height: 1;
+}
+.tarjeta-modal-close:focus-visible {
+  outline: 3px solid #fff;
+  outline-offset: 2px;
 }
 .tarjeta-modal-frame {
   width: 100%;

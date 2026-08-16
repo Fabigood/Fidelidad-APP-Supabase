@@ -53,7 +53,8 @@ function buildContainer() {
       recompensaRepository: repositories.recompensaRepository,
       reclamoRepository: repositories.reclamoRepository,
       pointsStrategy: strategies.pointsStrategy,
-      levelStrategy: strategies.levelStrategy
+      levelStrategy: strategies.levelStrategy,
+      zonaHoraria: config.zonaHoraria
     })
   };
 

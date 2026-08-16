@@ -9,40 +9,77 @@
 
     <article class="panel-card table-card">
       <div class="table-head">
-        <h2>Historial de envíos</h2>
-        <input v-model="filtro" class="search" placeholder="Buscar por cliente o correo..." />
+        <h2 id="titulo-historial">Historial de envíos</h2>
+        <div>
+          <label for="buscar-tarjeta" class="sr-only">Buscar tarjetas por cliente o correo</label>
+          <input
+            id="buscar-tarjeta"
+            v-model="filtro"
+            type="search"
+            class="search"
+            placeholder="Buscar por cliente o correo..."
+          />
+        </div>
       </div>
 
-      <div v-if="cargando" class="helper-text">Cargando tarjetas…</div>
-      <div v-else-if="error" class="alert-error">⚠ {{ error }}</div>
-      <div v-else-if="!tarjetasFiltradas.length" class="helper-text">
+      <div v-if="cargando" class="helper-text" role="status">Cargando tarjetas…</div>
+      <div v-else-if="error" class="alert-error" role="alert">
+        <span aria-hidden="true">⚠</span> {{ error }}
+      </div>
+      <div v-else-if="!totalItems" class="helper-text">
         {{ tarjetas.length ? 'No se encontraron tarjetas para esa búsqueda.' : 'Todavía no se envió ninguna tarjeta de fidelidad.' }}
       </div>
 
-      <table v-else>
-        <thead>
-          <tr>
-            <th>Cliente</th>
-            <th>Correo</th>
-            <th>Nivel</th>
-            <th>Puntos al enviar</th>
-            <th>Fecha de envío</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="t in tarjetasFiltradas" :key="t.id">
-            <td>
-              <strong class="cliente-link" @click="$router.push('/admin/clientes/' + t.clienteId)">{{ t.nombre }}</strong>
-            </td>
-            <td>{{ t.email }}</td>
-            <td><span class="badge" :class="nivelClass(t.nivel)">{{ t.nivel }}</span></td>
-            <td>{{ t.puntos }} pts</td>
-            <td>{{ formatFechaHora(t.fechaEnvio) }}</td>
-            <td><button @click="verTarjeta(t)">Vista previa</button></td>
-          </tr>
-        </tbody>
-      </table>
+      <template v-else>
+        <table aria-describedby="titulo-historial">
+          <caption class="sr-only">
+            Tarjetas de fidelidad enviadas, con el nivel y los puntos que tenía el cliente al enviarla
+          </caption>
+          <thead>
+            <tr>
+              <th scope="col">Cliente</th>
+              <th scope="col">Correo</th>
+              <th scope="col">Nivel</th>
+              <th scope="col">Puntos al enviar</th>
+              <th scope="col">Fecha de envío</th>
+              <th scope="col"><span class="sr-only">Acciones</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="t in itemsPagina" :key="t.id">
+              <th scope="row">
+                <!-- Antes era un <strong> con @click: invisible para el teclado
+                     y no se anunciaba como elemento interactivo. -->
+                <button
+                  type="button"
+                  class="cliente-link"
+                  @click="$router.push('/admin/clientes/' + t.clienteId)"
+                >
+                  {{ t.nombre }}
+                </button>
+              </th>
+              <td>{{ t.email }}</td>
+              <td><span class="badge" :class="nivelClass(t.nivel)">{{ t.nivel }}</span></td>
+              <td>{{ t.puntos }} pts</td>
+              <td>{{ formatFechaHora(t.fechaEnvio) }}</td>
+              <td>
+                <button @click="verTarjeta(t)">
+                  Vista previa<span class="sr-only"> de la tarjeta de {{ t.nombre }}</span>
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+
+        <PaginacionTabla
+          :total-items="totalItems"
+          :pagina-actual="paginaActual"
+          :por-pagina="porPagina"
+          etiqueta="tarjetas"
+          @cambiar-pagina="cambiarPagina"
+          @cambiar-tamano="cambiarTamano"
+        />
+      </template>
     </article>
 
     <TarjetaPreviewModal
@@ -58,10 +95,13 @@
 <script>
 import { listarTarjetasEnviadas, previsualizarTarjetaEnviada, nivelClass, mensajeDeError } from '../data/fidelidadStore'
 import TarjetaPreviewModal from '../components/TarjetaPreviewModal.vue'
+import PaginacionTabla from '../components/PaginacionTabla.vue'
+import { paginacionMixin } from '../utils/paginacion'
 
 export default {
   name: 'Tarjetas',
-  components: { TarjetaPreviewModal },
+  components: { TarjetaPreviewModal, PaginacionTabla },
+  mixins: [paginacionMixin],
   data() {
     return {
       filtro: '',
@@ -75,10 +115,15 @@ export default {
     }
   },
   computed: {
-    tarjetasFiltradas() {
+    itemsPaginables() {
       const term = this.filtro.trim().toLowerCase()
       if (!term) return this.tarjetas
       return this.tarjetas.filter(t => (t.nombre + ' ' + t.email).toLowerCase().includes(term))
+    }
+  },
+  watch: {
+    filtro() {
+      this.reiniciarPaginacion()
     }
   },
   async mounted() {
@@ -118,6 +163,12 @@ export default {
 .cliente-link {
   cursor: pointer;
   color: inherit;
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  font-weight: bold;
+  text-align: left;
 }
 .cliente-link:hover {
   text-decoration: underline;

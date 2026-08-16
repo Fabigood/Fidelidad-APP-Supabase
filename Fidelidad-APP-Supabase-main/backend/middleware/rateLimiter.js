@@ -15,7 +15,7 @@ function crearRateLimiter({
   maxIntentos,
   ventanaMs,
   mensaje,
-  soloContarFallos = false
+  liberarSiExito = false
 }) {
   const registros = new Map();
 
@@ -45,14 +45,18 @@ function crearRateLimiter({
       });
     }
 
-    if (soloContarFallos) {
-      // Cuenta solo credenciales invalidas y reinicia el contador al autenticar bien.
+    // El contador se incrementa AL ENTRAR, no al terminar la respuesta.
+    // Contarlo en el evento 'finish' dejaba pasar todas las peticiones
+    // concurrentes antes de que ninguna terminara: 20 simultaneas superaban un
+    // limite de 5.
+    registro.count += 1;
+
+    if (liberarSiExito) {
+      // Para el login: un inicio de sesion correcto devuelve el cupo consumido,
+      // de modo que solo penalizan los intentos fallidos.
       res.on('finish', () => {
-        if (res.statusCode === 401) registro.count += 1;
-        else if (res.statusCode < 400) registros.delete(clave);
+        if (res.statusCode < 400) registros.delete(clave);
       });
-    } else {
-      registro.count += 1;
     }
 
     next();
@@ -62,7 +66,7 @@ function crearRateLimiter({
 const loginRateLimiter = crearRateLimiter({
   maxIntentos: 5,
   ventanaMs: 10 * 60 * 1000,
-  soloContarFallos: true,
+  liberarSiExito: true,
   mensaje: (min) => `Demasiados intentos de inicio de sesión. Probá de nuevo en ${min} minuto(s).`
 });
 

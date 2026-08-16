@@ -28,7 +28,7 @@
 
       <article class="stat-card danger">
         <span>En riesgo</span>
-        <strong>{{ clientesRiesgo.length }}</strong>
+        <strong>{{ resumen.totalClientesEnRiesgo }}</strong>
       </article>
 
       <article class="stat-card">
@@ -81,6 +81,7 @@ const resumenVacio = {
   recompensasDisponibles: 0,
   recompensasEntregadas: 0,
   retornoPromedio: 0,
+  totalClientesEnRiesgo: 0,
   ticketPromedio: 0,
   clientesPorNivel: [],
   clientesEnRiesgo: []

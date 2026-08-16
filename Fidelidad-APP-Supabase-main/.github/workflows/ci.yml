@@ -1,0 +1,77 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  backend:
+    name: Backend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Fidelidad-APP-Supabase-main/backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: Fidelidad-APP-Supabase-main/backend/package-lock.json
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Auditoría de vulnerabilidades
+        run: npm audit --omit=dev --audit-level=moderate
+
+      - name: Pruebas
+        run: npm test
+
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Fidelidad-APP-Supabase-main/frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: Fidelidad-APP-Supabase-main/frontend/package-lock.json
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Compilar
+        run: npm run build
+
+  secretos:
+    name: Sin credenciales en el repositorio
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Falla si vuelve a colarse una credencial de ejemplo o un .env real.
+      - name: Buscar credenciales filtradas
+        run: |
+          if git ls-files | grep -E '(^|/)\.env$'; then
+            echo "ERROR: hay un archivo .env versionado"
+            exit 1
+          fi
+          if grep -rIn --exclude-dir=node_modules --exclude-dir=.git \
+             --exclude='ci.yml' --exclude='config.js' --exclude='verificarEntorno.js' \
+             -e 'claveSecreta123' .; then
+            echo "ERROR: aparece el secreto JWT de ejemplo"
+            exit 1
+          fi
+          echo "Sin credenciales filtradas."

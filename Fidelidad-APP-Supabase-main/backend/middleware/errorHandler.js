@@ -7,7 +7,8 @@ const ERRORES_POSTGRES = {
   '23503': { statusCode: 400, mensaje: 'El registro referenciado no existe' },
   '23502': { statusCode: 400, mensaje: 'Faltan campos obligatorios' },
   '23514': { statusCode: 422, mensaje: 'Los datos no cumplen las restricciones de la base' },
-  '22P02': { statusCode: 400, mensaje: 'Formato de dato inválido' }
+  '22P02': { statusCode: 400, mensaje: 'Formato de dato inválido' },
+  '22003': { statusCode: 422, mensaje: 'Un valor numérico está fuera de rango' }
 };
 
 function clasificar(err) {
@@ -37,6 +38,12 @@ module.exports = function errorHandler(err, req, res, next) {
   // Sin esto no queda ningún rastro para diagnosticar en el servidor.
   if (!esperado || statusCode >= 500) {
     console.error(`[ERROR] ${req.method} ${req.originalUrl} ->`, err);
+  }
+
+  // Si la respuesta ya empezó a enviarse no se puede cambiar el estado ni el
+  // cuerpo: intentarlo lanzaría ERR_HTTP_HEADERS_SENT y tumbaría la petición.
+  if (res.headersSent) {
+    return next(err);
   }
 
   // err.details puede ser un string (los errores de Supabase lo son): hacer spread
